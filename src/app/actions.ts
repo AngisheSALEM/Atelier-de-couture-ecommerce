@@ -72,3 +72,53 @@ export async function scheduleAppointment(data: {
     return { success: false, error: 'Impossible de prendre le rendez-vous.' };
   }
 }
+
+export async function getAdminDashboardData() {
+  try {
+    const orders = await prisma.commande.findMany({
+      include: { client: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const appointments = await prisma.rendezVous.findMany({
+      include: { client: true },
+      orderBy: { date: 'asc' },
+    });
+
+    const clients = await prisma.client.findMany({
+      include: {
+        _count: {
+          select: { commandes: true, rendezVous: true }
+        }
+      }
+    });
+
+    const stats = {
+      totalSales: orders.filter(o => o.status === 'PAYÉ').reduce((acc, o) => acc + o.total, 0),
+      pendingOrders: orders.filter(o => o.status === 'EN_ATTENTE').length,
+      todayAppointments: appointments.filter(a => {
+        const today = new Date();
+        return a.date.toDateString() === today.toDateString();
+      }).length,
+      totalClients: clients.length,
+    };
+
+    return { success: true, orders, appointments, clients, stats };
+  } catch (error) {
+    console.error('Error fetching admin data:', error);
+    return { success: false, error: 'Erreur lors de la récupération des données.' };
+  }
+}
+
+export async function updateOrderStatus(orderId: string, status: string) {
+  try {
+    await prisma.commande.update({
+      where: { id: orderId },
+      data: { status },
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    return { success: false, error: 'Erreur lors de la mise à jour.' };
+  }
+}
